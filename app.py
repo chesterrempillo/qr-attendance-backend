@@ -1,0 +1,107 @@
+from flask import Flask, request, jsonify, url_for
+from flask_cors import CORS
+import qrcode, os, sqlite3
+from datetime import datetime
+import socket
+
+app = Flask(__name__)
+CORS(app)  # Allow cross-origin requests
+
+DATABASE = "attendance.db"
+QR_DIR = "static/qrcodes"
+os.makedirs(QR_DIR, exist_ok=True)
+
+# Database connection
+def get_db():
+    conn = sqlite3.connect(DATABASE)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+# Initialize tables
+def init_db():
+    conn = get_db()
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS students (
+            student_id TEXT PRIMARY KEY,
+            name TEXT
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS attendance (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id TEXT,
+            date TEXT,
+            time TEXT,
+            device TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+# Generate daily QR
+@app.route("/generate_daily_qr")
+def generate_daily_qr():
+    today = datetime.now().strftime("%Y-%m-%d")
+    filename = f"{QR_DIR}/daily_qr_{today}.png"
+
+    # Use host dynamically (on Render we won’t know LAN IP)
+    frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000/attendance")
+
+    if not os.path.exists(filename):
+        qrcode.make(frontend_url).save(filename)
+
+    qr_image_url = url_for("static", filename=f"qrcodes/daily_qr_{today}.png", _external=True)
+    return jsonify({"qr_image": qr_image_url, "attendance_url": frontend_url})
+
+# Record attendance
+@app.route("/record_attendance", methods=["POST"])
+def record_attendance():
+    data = request.json
+    student_id = data.get("student_id")
+    device = request.headers.get("X-Device-ID", "unknown_device")
+    now = datetime.now()
+
+    if not student_id:
+        return jsonify({"error": "Student ID required"}), 400
+
+    conn = get_db()
+    student = conn.execute("SELECT * FROM students WHERE student_id = ?", (student_id,)).fetchone()
+    if not student:
+        conn.close()
+        return jsonify({"error": "Student not found"}), 404
+
+    conn.execute(
+        "INSERT INTO attendance (student_id, date, time, device) VALUES (?, ?, ?, ?)",
+        (student_id, now.strftime("%Y-%m-%d"), now.strftime("%H:%M:%S"), device)
+    )
+    conn.commit()
+    conn.close()
+
+    return jsonify({"message": f"Attendance recorded for {student['name']} ✅"})
+
+# Add student
+@app.route("/add_student", methods=["POST"])
+def add_student():
+    data = request.json
+    student_id = data.get("student_id")
+    name = data.get("name")
+
+    if not student_id or not name:
+        return jsonify({"error": "Student ID and Name required"}), 400
+
+    conn = get_db()
+    try:
+        conn.execute("INSERT INTO students (student_id, name) VALUES (?, ?)", (student_id, name))
+        conn.commit()
+    except sqlite3.IntegrityError:
+        conn.close()
+        return jsonify({"error": "Student ID already exists"}), 400
+    conn.close()
+    return jsonify({"message": f"Student {name} added ✅"})
+
+# Run app
+if __name__ == "__main__":
+    init_db()
+    import os
+    port = int(os.environ.get("PORT", 5000))  # Use Render’s assigned port
+    app.run(host="0.0.0.0", port=port)
