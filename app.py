@@ -123,6 +123,25 @@ class AddStudent(Resource):
             return {"error": "Student ID already exists"}, 400
         conn.close()
         return {"message": f"Student {name} added ✅"}
+@api.route('/attendance')
+class AttendanceList(Resource):
+    def get(self):
+        """Get all attendance records"""
+        conn = get_db()
+        rows = conn.execute("""
+            SELECT a.id, s.name, a.student_id, a.date, a.time, a.device
+            FROM attendance a
+            JOIN students s ON s.student_id = a.student_id
+            ORDER BY a.date DESC, a.time DESC
+        """).fetchall()
+        conn.close()
+
+        data = [dict(row) for row in rows]
+        return jsonify({
+            "count": len(data),
+            "records": data
+        })
+    
 
 # --- Run app ---
 if __name__ == "__main__":

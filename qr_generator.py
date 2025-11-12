@@ -1,21 +1,28 @@
 from flask import Flask, jsonify, url_for
 from flask_cors import CORS
-import qrcode, os
+import qrcode, os, socket
 from datetime import datetime
 
 app = Flask(__name__)
-CORS(app)  # allow requests from any origin
+
+# ✅ Allow any origin (so frontend can connect from any Wi-Fi or device)
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 QR_DIR = "static/qrcodes"
 os.makedirs(QR_DIR, exist_ok=True)
-
-# Use your deployed frontend URL here
-FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://qr-attendance-backend.onrender.com/attendance")
 
 @app.route("/generate_daily_qr")
 def generate_daily_qr():
     today = datetime.now().strftime("%Y-%m-%d")
     filename = f"{QR_DIR}/daily_qr_{today}.png"
+
+    # ✅ Detect local IP automatically (so QR works across Wi-Fi)
+    local_ip = socket.gethostbyname(socket.gethostname())
+
+    # ✅ FRONTEND_URL defaults to local frontend, or Render if deployed
+    FRONTEND_URL = os.environ.get(
+        "FRONTEND_URL", f"http://{local_ip}:3000/attendance"
+    )
 
     # Only generate if it doesn't exist
     if not os.path.exists(filename):
@@ -29,6 +36,5 @@ def generate_daily_qr():
     })
 
 if __name__ == "__main__":
-    import os
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
