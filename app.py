@@ -63,7 +63,7 @@ class GenerateDailyQR(Resource):
         filename = f"{QR_DIR}/daily_qr_{today}.png"
 
         FRONTEND_URL = os.environ.get(
-            "FRONTEND_URL", "https://your-frontend.onrender.com/attendance"
+            "FRONTEND_URL", "https://qr-attendance-frontend.onrender.com/attendance"
         )
 
         if not os.path.exists(filename):
