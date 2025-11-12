@@ -3,7 +3,7 @@ from flask_cors import CORS
 from datetime import datetime
 
 app = Flask(__name__)
-CORS(app, supports_credentials=True)  # allow React frontend to send requests
+CORS(app, origins="https://qr-attendance-backend.onrender.com")
 
 # Mock database
 students = {"2023-001": "Alice", "2023-002": "Bob"}

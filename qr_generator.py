@@ -1,52 +1,34 @@
-from flask_cors import cross_origin
-from flask_restx import Resource
-import os
-import qrcode
+from flask import Flask, jsonify, url_for
+from flask_cors import CORS
+import qrcode, os
 from datetime import datetime
-from flask import url_for
-import socket
 
-# Helper to get current LAN IP dynamically
-def get_local_ip():
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        # connect to a public IP to detect active network interface
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
-    except:
-        return "127.0.0.1"
+app = Flask(__name__)
+CORS(app)  # allow requests from any origin
 
-@api.route('/generate_daily_qr')
-class GenerateDailyQR(Resource):
+QR_DIR = "static/qrcodes"
+os.makedirs(QR_DIR, exist_ok=True)
 
-    @cross_origin()  # Allows requests from your React frontend
-    def get(self):
-        today = datetime.now().strftime("%Y-%m-%d")
-        qr_dir = "static/qrcodes"
-        os.makedirs(qr_dir, exist_ok=True)
-        filename = f"{qr_dir}/daily_qr_{today}.png"
+# Use your deployed frontend URL here
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://qr-attendance-backend.onrender.com/attendance")
 
-        # Dynamically detect LAN IP
-        local_ip = get_local_ip()
-        qr_url = f"http://{local_ip}:3000/attendance"
+@app.route("/generate_daily_qr")
+def generate_daily_qr():
+    today = datetime.now().strftime("%Y-%m-%d")
+    filename = f"{QR_DIR}/daily_qr_{today}.png"
 
-        # If QR already exists, return existing
-        if os.path.exists(filename):
-            qr_image_url = url_for("static", filename=f"qrcodes/daily_qr_{today}.png", _external=True)
-            return {
-                "message": "Today's QR already exists",
-                "qr_image": qr_image_url,
-                "qr_url": qr_url
-            }
+    # Only generate if it doesn't exist
+    if not os.path.exists(filename):
+        qrcode.make(FRONTEND_URL).save(filename)
 
-        # Generate new QR image
-        qrcode.make(qr_url).save(filename)
-        qr_image_url = url_for("static", filename=f"qrcodes/daily_qr_{today}.png", _external=True)
+    qr_image_url = url_for("static", filename=f"qrcodes/daily_qr_{today}.png", _external=True)
+    return jsonify({
+        "message": "Daily QR generated successfully!",
+        "qr_image": qr_image_url,
+        "attendance_url": FRONTEND_URL
+    })
 
-        return {
-            "message": "Daily QR generated successfully!",
-            "qr_image": qr_image_url,
-            "qr_url": qr_url
-        }
+if __name__ == "__main__":
+    import os
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
