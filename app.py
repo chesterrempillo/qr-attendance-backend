@@ -6,10 +6,12 @@ from datetime import datetime
 
 # --- Flask app ---
 app = Flask(__name__)
-CORS(app, origins=[
+
+# ✅ Allow CORS from both local and deployed frontend
+CORS(app, resources={r"/*": {"origins": [
     "http://localhost:3000",  # React dev
-    "https://your-frontend.onrender.com"  # deployed frontend URL
-], supports_credentials=True)
+    "https://qr-attendance-frontend.onrender.com"  # deployed frontend
+]}}, supports_credentials=True)
 
 # --- Swagger API ---
 api = Api(app, title="QR Attendance API", description="Backend API with Swagger UI")
@@ -62,12 +64,13 @@ class GenerateDailyQR(Resource):
         today = datetime.now().strftime("%Y-%m-%d")
         filename = f"{QR_DIR}/daily_qr_{today}.png"
 
+        # ✅ Make sure this URL points to your *actual* frontend
         FRONTEND_URL = os.environ.get(
             "FRONTEND_URL", "https://qr-attendance-frontend.onrender.com/attendance"
         )
 
-        if not os.path.exists(filename):
-            qrcode.make(FRONTEND_URL).save(filename)
+        # Always re-generate daily QR to update links if needed
+        qrcode.make(FRONTEND_URL).save(filename)
 
         qr_image_url = url_for("static", filename=f"qrcodes/daily_qr_{today}.png", _external=True)
         return {
@@ -123,6 +126,7 @@ class AddStudent(Resource):
             return {"error": "Student ID already exists"}, 400
         conn.close()
         return {"message": f"Student {name} added ✅"}
+
 @api.route('/attendance')
 class AttendanceList(Resource):
     def get(self):
@@ -141,11 +145,9 @@ class AttendanceList(Resource):
             "count": len(data),
             "records": data
         })
-    
 
 # --- Run app ---
 if __name__ == "__main__":
     init_db()
-    import os
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
