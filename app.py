@@ -7,11 +7,11 @@ from datetime import datetime
 # --- Flask app ---
 app = Flask(__name__)
 
-# ✅ Allow CORS from both local and deployed frontend
-CORS(app, resources={r"/*": {"origins": [
-    "http://localhost:3000",  # React dev
+# ✅ Fixed CORS setup (simpler and compatible with Render)
+CORS(app, origins=[
+    "http://localhost:3000",  # local React dev
     "https://qr-attendance-frontend.onrender.com"  # deployed frontend
-]}}, supports_credentials=True)
+])
 
 # --- Swagger API ---
 api = Api(app, title="QR Attendance API", description="Backend API with Swagger UI")
@@ -64,12 +64,11 @@ class GenerateDailyQR(Resource):
         today = datetime.now().strftime("%Y-%m-%d")
         filename = f"{QR_DIR}/daily_qr_{today}.png"
 
-        # ✅ Make sure this URL points to your *actual* frontend
         FRONTEND_URL = os.environ.get(
             "FRONTEND_URL", "https://qr-attendance-frontend.onrender.com/attendance"
         )
 
-        # Always re-generate daily QR to update links if needed
+        # Always regenerate QR for daily link
         qrcode.make(FRONTEND_URL).save(filename)
 
         qr_image_url = url_for("static", filename=f"qrcodes/daily_qr_{today}.png", _external=True)
@@ -79,7 +78,7 @@ class GenerateDailyQR(Resource):
             "attendance_url": FRONTEND_URL
         }
 
-@api.route('/record_attendance')
+@api.route('/record_attendance', strict_slashes=False)
 class RecordAttendance(Resource):
     @api.expect(attendance_model)
     def post(self):
@@ -130,7 +129,6 @@ class AddStudent(Resource):
 @api.route('/attendance')
 class AttendanceList(Resource):
     def get(self):
-        """Get all attendance records"""
         conn = get_db()
         rows = conn.execute("""
             SELECT a.id, s.name, a.student_id, a.date, a.time, a.device
@@ -139,7 +137,6 @@ class AttendanceList(Resource):
             ORDER BY a.date DESC, a.time DESC
         """).fetchall()
         conn.close()
-
         data = [dict(row) for row in rows]
         return jsonify({
             "count": len(data),
